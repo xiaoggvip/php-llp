@@ -58,6 +58,8 @@ class WebPageFetcher implements ToolInterface
         $ch = curl_init();
         curl_setopt_array($ch, [
             CURLOPT_URL => $url,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => false,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT => $this->timeout,
             CURLOPT_USERAGENT => 'Mozilla/5.0 (compatible; phpLLP Bot)',
