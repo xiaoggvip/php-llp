@@ -1,2 +1,50 @@
-LLPhant/
+# Dependencies
+/vendor/
+/LLPhant/
+composer.lock
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.projects/
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# Logs & Cache
+*.log
 *.cache
+.phpunit.result.cache
+coverage/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Runtime
+.php-version
+.phpunit.cache
+
+# Temporary files
+/tmp/
+/temp/
+*.tmp
+*.bak
+*.old
+
+# PHP specific
+composer.phar
+
+# Project specific
+/vector_store/
+/examples/output/

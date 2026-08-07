@@ -8,7 +8,8 @@ use PhpLLP\Contracts\ChatInterface;
 use PhpLLP\Contracts\ImageInterface;
 use PhpLLP\Contracts\AudioInterface;
 use PhpLLP\Contracts\EmbeddingInterface;
-use PhpLLP\Contracts\VectorStoreInterface;
+use PhpLLP\VectorStore\VectorStoreFactory;
+use PhpLLP\VectorStore\VectorStoreBase;
 use PhpLLP\Contracts\ToolInterface;
 use PhpLLP\Http\HttpClient;
 use PhpLLP\Exception\ConfigException;
@@ -154,8 +155,12 @@ class LLP
         $embeddingProvider = $this->getEmbeddingProvider();
         $chatProvider = $this->getChatProvider();
 
-        $qa = new \PhpLLP\Query\QuestionAnswering($vectorStore, $embeddingProvider, $chatProvider);
-        return $qa->answer($question, $options);
+        $qa = new \PhpLLP\Query\QuestionAnswering($chatProvider, $embeddingProvider, $vectorStore);
+        $qa->setTopK($options['top_k'] ?? 5);
+        $qa->setThreshold($options['threshold'] ?? 0.0);
+
+        $result = $qa->answer($question, $options);
+        return $result['answer'] ?? '';
     }
 
     private function getChatProvider(): ChatInterface
@@ -234,31 +239,30 @@ class LLP
         }
     }
 
-    private function createVectorStore(string $type): VectorStoreInterface
+    private function createVectorStore(string $type): VectorStoreBase
     {
-        $config = $this->config;
-        switch ($type) {
-            case 'filesystem':
-                return new \PhpLLP\VectorStore\FileSystemVectorStore($config);
-            case 'sqlite':
-                return new \PhpLLP\VectorStore\SQLiteVectorStore($config);
-            case 'postgres':
-                return new \PhpLLP\VectorStore\PostgresVectorStore($config);
-            case 'qdrant':
-                return new \PhpLLP\VectorStore\QdrantVectorStore($config, $this->httpClient);
-            case 'redis':
-                return new \PhpLLP\VectorStore\RedisVectorStore($config);
-            case 'elasticsearch':
-                return new \PhpLLP\VectorStore\ElasticsearchVectorStore($config, $this->httpClient);
-            case 'milvus':
-                return new \PhpLLP\VectorStore\MilvusVectorStore($config, $this->httpClient);
-            case 'chromadb':
-                return new \PhpLLP\VectorStore\ChromaDBVectorStore($config, $this->httpClient);
-            case 'astradb':
-                return new \PhpLLP\VectorStore\AstraDBVectorStore($config, $this->httpClient);
-            default:
-                throw new ConfigException("不支持的 VectorStore: {$type}");
-        }
+        $config = array_merge([
+            'collection' => $this->config['collection'] ?? 'default',
+            'dimension' => $this->config['dimension'] ?? 1536,
+            'path' => $this->config['path'] ?? './vector_store',
+            'db_path' => $this->config['db_path'] ?? ':memory:',
+        ], $this->config);
+
+        $typeMap = [
+            'filesystem' => VectorStoreFactory::TYPE_FILE_SYSTEM,
+            'sqlite' => VectorStoreFactory::TYPE_SQLITE,
+            'postgres' => VectorStoreFactory::TYPE_POSTGRES,
+            'qdrant' => VectorStoreFactory::TYPE_QDRANT,
+            'redis' => VectorStoreFactory::TYPE_REDIS,
+            'elasticsearch' => VectorStoreFactory::TYPE_ELASTICSEARCH,
+            'milvus' => VectorStoreFactory::TYPE_MILVUS,
+            'chromadb' => VectorStoreFactory::TYPE_CHROMA,
+            'astradb' => VectorStoreFactory::TYPE_ASTRA,
+        ];
+
+        $factoryType = $typeMap[$type] ?? $type;
+
+        return VectorStoreFactory::create($factoryType, $config);
     }
 
     /**

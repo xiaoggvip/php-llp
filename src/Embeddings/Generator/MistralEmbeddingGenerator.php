@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace PhpLLP\Embeddings\Generator;
 
 use PhpLLP\Contracts\EmbeddingInterface;
+use PhpLLP\Embeddings\Document;
 use PhpLLP\Http\HttpClient;
 use PhpLLP\Support\Json;
 
@@ -70,5 +71,35 @@ class MistralEmbeddingGenerator implements EmbeddingInterface
         }
 
         return $result;
+    }
+
+    public function embedText(string $text, array $options = []): array
+    {
+        return $this->embed($text);
+    }
+
+    public function embedDocument(Document $document, array $options = []): Document
+    {
+        $embedding = $this->embed($document->getContent());
+        $document->setEmbedding($embedding);
+        return $document;
+    }
+
+    public function embedDocuments(array $documents, array $options = []): array
+    {
+        $texts = [];
+        foreach ($documents as $doc) {
+            $texts[] = $doc->getContent();
+        }
+
+        $embeddings = $this->embedBatch($texts);
+
+        foreach ($documents as $i => $doc) {
+            if (isset($embeddings[$i])) {
+                $doc->setEmbedding($embeddings[$i]);
+            }
+        }
+
+        return $documents;
     }
 }
