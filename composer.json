@@ -1,0 +1,30 @@
+{
+    "name": "php-llp/php-llp",
+    "description": "A lightweight, zero-dependency PHP library for building LLM applications. Supports PHP 7.4+.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": ["php", "llm", "ai", "llp", "chat", "embeddings", "vector-store", "rag"],
+    "authors": [
+        {
+            "name": "phpLLP Contributors"
+        }
+    ],
+    "require": {
+        "php": ">=7.4"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "PhpLLP\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "PhpLLP\\Tests\\": "tests/"
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
