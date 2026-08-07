@@ -62,9 +62,12 @@ class HttpClient implements HttpClientInterface
         curl_setopt_array($ch, [
             CURLOPT_URL => $url,
             CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HEADER => true,
             CURLOPT_TIMEOUT => $this->timeout,
             CURLOPT_HTTPHEADER => $formattedHeaders,
             CURLOPT_CUSTOMREQUEST => $method,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => false,
         ]);
 
         if ($body !== null) {
@@ -123,6 +126,8 @@ class HttpClient implements HttpClientInterface
             CURLOPT_TIMEOUT => 0,
             CURLOPT_HTTPHEADER => $formattedHeaders,
             CURLOPT_CUSTOMREQUEST => $method,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => false,
             CURLOPT_WRITEFUNCTION => function ($ch, $chunk) use (&$lines, &$lineBuffer) {
                 $lineBuffer .= $chunk;
                 $parts = explode("\n", $lineBuffer);

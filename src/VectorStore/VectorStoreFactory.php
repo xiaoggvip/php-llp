@@ -32,7 +32,7 @@ class VectorStoreFactory
         $distanceMetric = $config['distance_metric'] ?? new CosineDistance();
         $collectionName = $config['collection'] ?? 'default';
         $dimension = $config['dimension'] ?? 1536;
-
+		$type = strtolower($type);
         switch ($type) {
             case self::TYPE_FILE_SYSTEM:
                 return new FileSystemVectorStore($collectionName, $distanceMetric, $dimension, $config['path'] ?? './vector_store');
