@@ -23,6 +23,9 @@ class PostgresVectorStore extends VectorStoreBase
     /** @var string */
     private $apiKey;
 
+    /** @var bool */
+    private $initialized = false;
+
     /**
      * @param string $collectionName
      * @param Distance|null $distanceMetric
@@ -69,6 +72,7 @@ class PostgresVectorStore extends VectorStoreBase
 
     public function addDocument(Document $document): string
     {
+        $this->ensureInitialized();
         $id = $document->getId();
         $tableName = $this->getTableName();
         $embedding = $document->getEmbedding();
@@ -97,6 +101,7 @@ class PostgresVectorStore extends VectorStoreBase
 
     public function addDocuments(array $documents): array
     {
+        $this->ensureInitialized();
         $ids = [];
         foreach ($documents as $document) {
             $ids[] = $this->addDocument($document);
@@ -216,10 +221,34 @@ class PostgresVectorStore extends VectorStoreBase
         return (int)($result[0]['count'] ?? 0);
     }
 
+    /**
+     * 确保表已初始化，如果不存在则自动创建
+     */
+    private function ensureInitialized(): void
+    {
+        if ($this->initialized) {
+            return;
+        }
+
+        try {
+            $tableName = $this->getTableName();
+            $result = $this->executeQuery("SELECT to_regclass('{$tableName}') as exists_check");
+            if (!empty($result) && !empty($result[0]['exists_check'])) {
+                $this->initialized = true;
+                return;
+            }
+        } catch (\Exception $e) {
+        }
+
+        $this->initialize();
+        $this->initialized = true;
+    }
+
     public function clear(): void
     {
         $tableName = $this->getTableName();
         $this->executeQuery("DELETE FROM {$tableName}");
+        $this->initialized = false;
     }
 
     /**

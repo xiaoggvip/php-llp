@@ -23,6 +23,9 @@ class MilvusVectorStore extends VectorStoreBase
     /** @var string */
     private $apiKey;
 
+    /** @var bool */
+    private $initialized = false;
+
     /**
      * @param string $collectionName
      * @param Distance|null $distanceMetric
@@ -51,10 +54,61 @@ class MilvusVectorStore extends VectorStoreBase
 
         $payload = [
             'collectionName' => $this->collectionName,
-            'dimension' => $this->dimension,
-            'metricType' => $distance,
-            'description' => 'phpLLP vector collection',
-            'autoID' => false,
+            'schema' => [
+                'autoId' => false,
+                'enabledDynamicField' => false,
+                'fields' => [
+                    [
+                        'fieldName' => 'id',
+                        'dataType' => 'VarChar',
+                        'isPrimary' => true,
+                        'elementTypeParams' => [
+                            'max_length' => 256,
+                        ],
+                    ],
+                    [
+                        'fieldName' => 'content',
+                        'dataType' => 'VarChar',
+                        'elementTypeParams' => [
+                            'max_length' => 65535,
+                        ],
+                    ],
+                    [
+                        'fieldName' => 'embedding',
+                        'dataType' => 'FloatVector',
+                        'elementTypeParams' => [
+                            'dim' => (string)$this->dimension,
+                        ],
+                    ],
+                    [
+                        'fieldName' => 'metadata',
+                        'dataType' => 'VarChar',
+                        'elementTypeParams' => [
+                            'max_length' => 65535,
+                        ],
+                    ],
+                    [
+                        'fieldName' => 'hash',
+                        'dataType' => 'VarChar',
+                        'elementTypeParams' => [
+                            'max_length' => 64,
+                        ],
+                    ],
+                ],
+            ],
+            'indexParams' => [
+                [
+                    'fieldName' => 'embedding',
+                    'metricType' => $distance,
+                    'indexName' => 'embedding_index',
+                    'indexType' => 'AUTOINDEX',
+                ],
+                [
+                    'fieldName' => 'id',
+                    'indexName' => 'id_index',
+                    'indexType' => 'AUTOINDEX',
+                ],
+            ],
         ];
 
         $this->httpClient->post(
@@ -66,6 +120,7 @@ class MilvusVectorStore extends VectorStoreBase
 
     public function addDocument(Document $document): string
     {
+        $this->ensureInitialized();
         $id = $document->getId();
 
         $payload = [
@@ -75,7 +130,7 @@ class MilvusVectorStore extends VectorStoreBase
                     'id' => $id,
                     'content' => $document->getContent(),
                     'embedding' => $document->getEmbedding(),
-                    'metadata' => json_encode($document->getMetadata()),
+                    'metadata' => json_encode($document->getMetadata(), JSON_UNESCAPED_UNICODE),
                     'hash' => $document->getHash(),
                 ],
             ],
@@ -92,6 +147,7 @@ class MilvusVectorStore extends VectorStoreBase
 
     public function addDocuments(array $documents): array
     {
+        $this->ensureInitialized();
         $data = [];
         $ids = [];
 
@@ -102,7 +158,7 @@ class MilvusVectorStore extends VectorStoreBase
                 'id' => $id,
                 'content' => $document->getContent(),
                 'embedding' => $document->getEmbedding(),
-                'metadata' => json_encode($document->getMetadata()),
+                'metadata' => json_encode($document->getMetadata(), JSON_UNESCAPED_UNICODE),
                 'hash' => $document->getHash(),
             ];
         }
@@ -255,14 +311,62 @@ class MilvusVectorStore extends VectorStoreBase
 
     public function count(): int
     {
-        $response = $this->httpClient->post(
-            $this->baseUrl . '/v2/vectordb/collections/describe',
-            $this->getHeaders(),
-            ['collectionName' => $this->collectionName]
-        );
+        try {
+            $response = $this->httpClient->post(
+                $this->baseUrl . '/v2/vectordb/collections/describe',
+                $this->getHeaders(),
+                ['collectionName' => $this->collectionName]
+            );
 
-        $data = Json::decode($response->getBody());
-        return (int)($data['entityCount'] ?? 0);
+            $body = $response->getBody();
+            if (!empty($body)) {
+                $data = Json::decode($body);
+                if (is_array($data) && isset($data['entityCount'])) {
+                    return (int)$data['entityCount'];
+                }
+            }
+        } catch (\Exception $e) {
+        }
+
+        return 0;
+    }
+
+    /**
+     * 确保集合已初始化，如果不存在则自动创建
+     */
+    private function ensureInitialized(): void
+    {
+        if ($this->initialized) {
+            return;
+        }
+
+        try {
+            $response = $this->httpClient->post(
+                $this->baseUrl . '/v2/vectordb/collections/describe',
+                $this->getHeaders(),
+                ['collectionName' => $this->collectionName]
+            );
+
+            $body = $response->getBody();
+            if (!empty($body)) {
+                $data = Json::decode($body);
+                if (is_array($data) && (
+                    isset($data['entity']) ||
+                    isset($data['collectionName']) ||
+                    !empty($data['data'])
+                )) {
+                    $this->initialized = true;
+                    return;
+                }
+            }
+        } catch (\Exception $e) {
+        }
+
+        try {
+            $this->initialize();
+        } catch (\Exception $e) {
+        }
+        $this->initialized = true;
     }
 
     public function clear(): void
@@ -272,7 +376,7 @@ class MilvusVectorStore extends VectorStoreBase
             $this->getHeaders(),
             ['collectionName' => $this->collectionName]
         );
-        $this->initialize();
+        $this->initialized = false;
     }
 
     /**
@@ -295,8 +399,12 @@ class MilvusVectorStore extends VectorStoreBase
     {
         $metadata = [];
         if (isset($row['metadata'])) {
-            $decoded = json_decode($row['metadata'], true);
-            $metadata = is_array($decoded) ? $decoded : [];
+            if (is_array($row['metadata'])) {
+                $metadata = $row['metadata'];
+            } else {
+                $decoded = json_decode($row['metadata'], true);
+                $metadata = is_array($decoded) ? $decoded : [];
+            }
         }
 
         return new Document([

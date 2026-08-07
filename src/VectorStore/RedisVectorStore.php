@@ -23,6 +23,9 @@ class RedisVectorStore extends VectorStoreBase
     /** @var string */
     private $indexName;
 
+    /** @var bool */
+    private $initialized = false;
+
     /**
      * @param string $collectionName
      * @param Distance|null $distanceMetric
@@ -74,6 +77,7 @@ class RedisVectorStore extends VectorStoreBase
 
     public function addDocument(Document $document): string
     {
+        $this->ensureInitialized();
         $id = $document->getId();
         $embedding = $document->getEmbedding();
 
@@ -104,6 +108,7 @@ class RedisVectorStore extends VectorStoreBase
 
     public function addDocuments(array $documents): array
     {
+        $this->ensureInitialized();
         $ids = [];
         foreach ($documents as $document) {
             $ids[] = $this->addDocument($document);
@@ -231,6 +236,31 @@ class RedisVectorStore extends VectorStoreBase
         return (int)($data['numDocs'] ?? 0);
     }
 
+    /**
+     * 确保索引已初始化，如果不存在则自动创建
+     */
+    private function ensureInitialized(): void
+    {
+        if ($this->initialized) {
+            return;
+        }
+
+        try {
+            $response = $this->httpClient->get(
+                $this->baseUrl . '/ft.info?indexName=' . $this->indexName
+            );
+            $data = Json::decode($response->getBody());
+            if (isset($data['numDocs'])) {
+                $this->initialized = true;
+                return;
+            }
+        } catch (\Exception $e) {
+        }
+
+        $this->initialize();
+        $this->initialized = true;
+    }
+
     public function clear(): void
     {
         $this->httpClient->post(
@@ -239,6 +269,7 @@ class RedisVectorStore extends VectorStoreBase
             ['indexName' => $this->indexName]
         );
         $this->initialize();
+        $this->initialized = false;
     }
 
     /**

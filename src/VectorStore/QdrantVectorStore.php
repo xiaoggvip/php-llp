@@ -23,6 +23,9 @@ class QdrantVectorStore extends VectorStoreBase
     /** @var string */
     private $apiKey;
 
+    /** @var bool */
+    private $initialized = false;
+
     /**
      * @param string $collectionName
      * @param Distance|null $distanceMetric
@@ -70,6 +73,7 @@ class QdrantVectorStore extends VectorStoreBase
 
     public function addDocument(Document $document): string
     {
+        $this->ensureInitialized();
         $id = $document->getId();
         $payload = [
             'points' => [
@@ -101,6 +105,7 @@ class QdrantVectorStore extends VectorStoreBase
 
     public function addDocuments(array $documents): array
     {
+        $this->ensureInitialized();
         $points = [];
         $ids = [];
 
@@ -292,6 +297,38 @@ class QdrantVectorStore extends VectorStoreBase
         return (int)($data['result']['points_count'] ?? 0);
     }
 
+    /**
+     * 确保集合已初始化，如果不存在则自动创建
+     */
+    private function ensureInitialized(): void
+    {
+        if ($this->initialized) {
+            return;
+        }
+
+        try {
+            $headers = [];
+            if ($this->apiKey) {
+                $headers['api-key'] = $this->apiKey;
+            }
+
+            $response = $this->httpClient->get(
+                $this->baseUrl . '/collections/' . $this->collectionName,
+                $headers
+            );
+
+            $data = Json::decode($response->getBody());
+            if (isset($data['result'])) {
+                $this->initialized = true;
+                return;
+            }
+        } catch (\Exception $e) {
+        }
+
+        $this->initialize();
+        $this->initialized = true;
+    }
+
     public function clear(): void
     {
         $headers = [];
@@ -303,8 +340,7 @@ class QdrantVectorStore extends VectorStoreBase
             $this->baseUrl . '/collections/' . $this->collectionName,
             $headers
         );
-
-        $this->initialize();
+        $this->initialized = false;
     }
 
     /**

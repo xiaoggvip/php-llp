@@ -26,6 +26,9 @@ class AstraDBVectorStore extends VectorStoreBase
     /** @var string */
     private $namespace;
 
+    /** @var bool */
+    private $initialized = false;
+
     /**
      * @param string $collectionName
      * @param Distance|null $distanceMetric
@@ -71,6 +74,7 @@ class AstraDBVectorStore extends VectorStoreBase
 
     public function addDocument(Document $document): string
     {
+        $this->ensureInitialized();
         $id = $document->getId();
 
         $payload = [
@@ -91,6 +95,7 @@ class AstraDBVectorStore extends VectorStoreBase
 
     public function addDocuments(array $documents): array
     {
+        $this->ensureInitialized();
         $ids = [];
         $docs = [];
 
@@ -227,13 +232,39 @@ class AstraDBVectorStore extends VectorStoreBase
         return (int)($data['count'] ?? 0);
     }
 
+    /**
+     * 确保集合已初始化，如果不存在则自动创建
+     */
+    private function ensureInitialized(): void
+    {
+        if ($this->initialized) {
+            return;
+        }
+
+        try {
+            $response = $this->httpClient->get(
+                $this->getCollectionUrl(),
+                $this->getHeaders()
+            );
+            $data = Json::decode($response->getBody());
+            if (!empty($data)) {
+                $this->initialized = true;
+                return;
+            }
+        } catch (\Exception $e) {
+        }
+
+        $this->initialize();
+        $this->initialized = true;
+    }
+
     public function clear(): void
     {
         $this->httpClient->delete(
             $this->getCollectionUrl(),
             $this->getHeaders()
         );
-        $this->initialize();
+        $this->initialized = false;
     }
 
     /**

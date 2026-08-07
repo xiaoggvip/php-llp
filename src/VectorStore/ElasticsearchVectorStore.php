@@ -23,6 +23,9 @@ class ElasticsearchVectorStore extends VectorStoreBase
     /** @var string */
     private $apiKey;
 
+    /** @var bool */
+    private $initialized = false;
+
     /**
      * @param string $collectionName
      * @param Distance|null $distanceMetric
@@ -79,6 +82,7 @@ class ElasticsearchVectorStore extends VectorStoreBase
 
     public function addDocument(Document $document): string
     {
+        $this->ensureInitialized();
         $id = $document->getId();
         $payload = [
             'content' => $document->getContent(),
@@ -98,6 +102,7 @@ class ElasticsearchVectorStore extends VectorStoreBase
 
     public function addDocuments(array $documents): array
     {
+        $this->ensureInitialized();
         $ids = [];
         $bulkPayload = '';
 
@@ -278,13 +283,39 @@ class ElasticsearchVectorStore extends VectorStoreBase
         return (int)($data['count'] ?? 0);
     }
 
+    /**
+     * 确保索引已初始化，如果不存在则自动创建
+     */
+    private function ensureInitialized(): void
+    {
+        if ($this->initialized) {
+            return;
+        }
+
+        try {
+            $response = $this->httpClient->get(
+                $this->baseUrl . '/' . $this->collectionName,
+                $this->getHeaders()
+            );
+            $data = Json::decode($response->getBody());
+            if (isset($data[$this->collectionName])) {
+                $this->initialized = true;
+                return;
+            }
+        } catch (\Exception $e) {
+        }
+
+        $this->initialize();
+        $this->initialized = true;
+    }
+
     public function clear(): void
     {
         $this->httpClient->delete(
             $this->baseUrl . '/' . $this->collectionName,
             $this->getHeaders()
         );
-        $this->initialize();
+        $this->initialized = false;
     }
 
     /**
