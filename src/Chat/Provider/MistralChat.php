@@ -143,10 +143,23 @@ class MistralChat implements ChatInterface
         }
 
         foreach ($messages as $msg) {
-            $allMessages[] = [
-                'role' => $msg['role'] ?? ChatRole::USER,
-                'content' => $msg['content'] ?? '',
+            $role = $msg['role'] ?? ChatRole::USER;
+            $content = $msg['content'] ?? '';
+
+            $messageData = [
+                'role' => $role,
+                'content' => $content,
             ];
+
+            if ($role === 'assistant' && isset($msg['tool_calls']) && !empty($msg['tool_calls'])) {
+                $messageData['tool_calls'] = $msg['tool_calls'];
+            }
+
+            if ($role === 'tool' && isset($msg['tool_call_id'])) {
+                $messageData['tool_call_id'] = $msg['tool_call_id'];
+            }
+
+            $allMessages[] = $messageData;
         }
 
         return $allMessages;
@@ -191,7 +204,7 @@ class MistralChat implements ChatInterface
      * @param array<string, mixed> $options
      * @return mixed
      */
-    protected function generateChatWithTools(array $messages, array $tools, array $options = [])
+    public function generateChatWithTools(array $messages, array $tools, array $options = [])
     {
         $allMessages = $this->buildMessages($messages);
         $payload = $this->buildPayload($allMessages, $options);

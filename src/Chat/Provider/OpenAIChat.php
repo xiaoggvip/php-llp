@@ -143,10 +143,23 @@ class OpenAIChat implements ChatInterface
         }
 
         foreach ($messages as $msg) {
-            $allMessages[] = [
-                'role' => $msg['role'] ?? ChatRole::USER,
-                'content' => $msg['content'] ?? '',
+            $role = $msg['role'] ?? ChatRole::USER;
+            $content = $msg['content'] ?? '';
+
+            $messageData = [
+                'role' => $role,
+                'content' => $content,
             ];
+
+            if ($role === 'assistant' && isset($msg['tool_calls']) && !empty($msg['tool_calls'])) {
+                $messageData['tool_calls'] = $msg['tool_calls'];
+            }
+
+            if ($role === 'tool' && isset($msg['tool_call_id'])) {
+                $messageData['tool_call_id'] = $msg['tool_call_id'];
+            }
+
+            $allMessages[] = $messageData;
         }
 
         return $allMessages;
@@ -159,12 +172,18 @@ class OpenAIChat implements ChatInterface
      */
     protected function buildPayload(array $messages, array $options = []): array
     {
-        return [
+        $payload = [
             'model' => $options['model'] ?? $this->model,
             'messages' => $messages,
             'temperature' => $options['temperature'] ?? ($this->config['temperature'] ?? 0.7),
             'max_tokens' => $options['max_tokens'] ?? ($this->config['max_tokens'] ?? 1024),
         ];
+
+        if (isset($options['tool_choice'])) {
+            $payload['tool_choice'] = $options['tool_choice'];
+        }
+
+        return $payload;
     }
 
     /**
@@ -192,31 +211,53 @@ class OpenAIChat implements ChatInterface
      * @param array<string, mixed> $options
      * @return mixed
      */
-    protected function generateChatWithTools(array $messages, array $tools, array $options = [])
+    public function generateChatWithTools(array $messages, array $tools, array $options = [])
     {
         $allMessages = $this->buildMessages($messages);
         $payload = $this->buildPayload($allMessages, $options);
         $payload['tools'] = $tools;
 
-        $response = $this->httpClient->post(
-            $this->baseUrl . '/chat/completions',
-            $this->getDefaultHeaders(),
-            $payload
-        );
-
-        $data = Json::decode($response->getBody());
-        $this->totalTokens += $data['usage']['total_tokens'] ?? 0;
-
-        $choice = $data['choices'][0] ?? [];
-        $message = $choice['message'] ?? [];
-
-        if (isset($message['tool_calls']) && !empty($message['tool_calls'])) {
-            return [
-                'content' => $message['content'] ?? '',
-                'tool_calls' => $message['tool_calls'],
-            ];
+        $debug = $options['debug'] ?? ($this->config['debug'] ?? false);
+        if ($debug) {
+            error_log('[LLP] Tool request payload: ' . json_encode($payload, JSON_UNESCAPED_UNICODE));
         }
 
-        return $message['content'] ?? '';
+        try {
+            $response = $this->httpClient->post(
+                $this->baseUrl . '/chat/completions',
+                $this->getDefaultHeaders(),
+                $payload
+            );
+
+            $body = $response->getBody();
+            if ($debug) {
+                error_log('[LLP] Tool response body: ' . $body);
+            }
+
+            $data = Json::decode($body);
+
+            if (isset($data['error'])) {
+                $errorMsg = $data['error']['message'] ?? 'Unknown error';
+                error_log('[LLP] API error: ' . $errorMsg);
+                return 'API Error: ' . $errorMsg;
+            }
+
+            $this->totalTokens += $data['usage']['total_tokens'] ?? 0;
+
+            $choice = $data['choices'][0] ?? [];
+            $message = $choice['message'] ?? [];
+
+            if (isset($message['tool_calls']) && !empty($message['tool_calls'])) {
+                return [
+                    'content' => $message['content'] ?? '',
+                    'tool_calls' => $message['tool_calls'],
+                ];
+            }
+
+            return $message['content'] ?? '';
+        } catch (\Throwable $e) {
+            error_log('[LLP] Tool call exception: ' . $e->getMessage());
+            return 'Error: ' . $e->getMessage();
+        }
     }
 }

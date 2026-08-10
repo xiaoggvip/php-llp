@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace PhpLLP\Http;
 
 use PhpLLP\Contracts\HttpClientInterface;
-use PhpLLP\Exception\HttpException;
 use PhpLLP\Support\Json;
 
 class HttpClient implements HttpClientInterface
@@ -81,15 +80,17 @@ class HttpClient implements HttpClientInterface
         $responseBody = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $error = curl_error($ch);
+
+        if ($responseBody === false) {
+            curl_close($ch);
+            return new HttpResponse($httpCode, $error, '[]');
+        }
+
         $headersSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
         $responseHeaders = substr($responseBody, 0, $headersSize);
         $bodyContent = substr($responseBody, $headersSize);
 
         curl_close($ch);
-
-        if ($httpCode < 200 || $httpCode >= 300) {
-            throw new HttpException("HTTP请求失败: [{$httpCode}] " . ($error ?: $bodyContent), $httpCode);
-        }
 
         return new HttpResponse($httpCode, $bodyContent, $responseHeaders);
     }
@@ -105,7 +106,6 @@ class HttpClient implements HttpClientInterface
      * @param array<string, string> $headers
      * @param mixed $body
      * @return \Generator
-     * @throws HttpException
      */
     private function requestStream(string $method, string $url, array $headers = [], $body = null): \Generator
     {
@@ -165,7 +165,10 @@ class HttpClient implements HttpClientInterface
         }
 
         if ($httpCode < 200 || $httpCode >= 300) {
-            throw new HttpException("HTTP流式请求失败: [{$httpCode}] " . ($error ?: ''), $httpCode);
+            throw new \RuntimeException(
+                sprintf('HTTP流式请求失败: %s %s - 状态码: %d, 错误: %s', $method, $url, $httpCode, $error),
+                $httpCode
+            );
         }
 
         foreach ($lines as $line) {

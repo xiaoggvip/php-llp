@@ -82,8 +82,124 @@ class LLP
 
     public function chat(string $prompt, array $options = []): string
     {
+        $toolManager = $this->getToolManager();
+        $tools = $toolManager->all();
+
+        if (!empty($tools)) {
+            return $this->chatWithTools($prompt, $tools, $options);
+        }
+
         $chat = $this->getChatProvider();
         return $chat->generateText($prompt, $options);
+    }
+
+    /**
+     * @param string $prompt
+     * @param array<string, \PhpLLP\Contracts\ToolInterface> $tools
+     * @param array<string, mixed> $options
+     * @return string
+     */
+    private function chatWithTools(string $prompt, array $tools, array $options = []): string
+    {
+        $chat = $this->getChatProvider();
+        $toolManager = $this->getToolManager();
+        $debug = $options['debug'] ?? ($this->config['debug'] ?? false);
+
+        $toolSchemas = [];
+        foreach ($tools as $tool) {
+            $functionInfo = \PhpLLP\Chat\FunctionCall\FunctionInfo::fromTool($tool);
+            $toolSchemas[] = $functionInfo->toToolFormat();
+        }
+
+        $messages = [
+            ['role' => 'user', 'content' => $prompt],
+        ];
+
+        $iteration = 0;
+        $maxIterations = $options['max_iterations'] ?? 10;
+
+        if ($debug) {
+            error_log('[LLP] Starting tool-enabled chat with ' . count($tools) . ' tools, max iterations: ' . $maxIterations);
+        }
+
+        while ($iteration < $maxIterations) {
+            $iteration++;
+
+            if ($debug) {
+                error_log('[LLP] Iteration ' . $iteration . ', messages count: ' . count($messages));
+            }
+
+            $result = $chat->generateChatWithTools($messages, $toolSchemas, $options);
+
+            if ($debug) {
+                error_log('[LLP] Result type: ' . gettype($result) . ', value: ' . (is_string($result) ? $result : json_encode($result, JSON_UNESCAPED_UNICODE)));
+            }
+
+            if (is_string($result)) {
+                if ($debug) {
+                    error_log('[LLP] Got string response, returning directly');
+                }
+                return $result;
+            }
+
+            if (is_array($result) && isset($result['tool_calls'])) {
+                $toolCalls = $result['tool_calls'];
+                $assistantContent = $result['content'] ?? '';
+
+                if ($debug) {
+                    error_log('[LLP] Got ' . count($toolCalls) . ' tool calls');
+                }
+
+                $assistantMessage = [
+                    'role' => 'assistant',
+                    'content' => $assistantContent,
+                    'tool_calls' => [],
+                ];
+
+                foreach ($toolCalls as $toolCallData) {
+                    $toolCall = \PhpLLP\Chat\FunctionCall\ToolCall::fromArray($toolCallData);
+                    $functionName = $toolCall->getFunctionName();
+
+                    if ($debug) {
+                        error_log('[LLP] Tool call: ' . $functionName . ' with args: ' . json_encode($toolCall->getArguments(), JSON_UNESCAPED_UNICODE));
+                    }
+
+                    $assistantMessage['tool_calls'][] = $toolCallData;
+                }
+
+                $messages[] = $assistantMessage;
+
+                foreach ($toolCalls as $toolCallData) {
+                    $toolCall = \PhpLLP\Chat\FunctionCall\ToolCall::fromArray($toolCallData);
+                    $functionName = $toolCall->getFunctionName();
+
+                    $toolResult = $toolManager->execute($functionName, $toolCall->getArguments());
+
+                    if ($debug) {
+                        error_log('[LLP] Tool ' . $functionName . ' result: ' . ($toolResult->isSuccess() ? 'success' : 'failed') . ' - ' . (string)$toolResult);
+                    }
+
+                    $messages[] = [
+                        'role' => 'tool',
+                        'tool_call_id' => $toolCall->getId(),
+                        'content' => $toolResult->isSuccess()
+                            ? (is_array($toolResult->getData()) ? \PhpLLP\Support\Json::encode($toolResult->getData()) : (string)$toolResult->getData())
+                            : $toolResult->getError(),
+                    ];
+                }
+            } else {
+                if ($debug) {
+                    error_log('[LLP] No tool calls and not a string result, breaking loop');
+                }
+                break;
+            }
+        }
+
+        if ($debug) {
+            error_log('[LLP] Tool chat completed after ' . $iteration . ' iterations');
+        }
+
+        return '';
     }
 
     /**

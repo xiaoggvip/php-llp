@@ -7,6 +7,7 @@ namespace PhpLLP\VectorStore;
 use PhpLLP\Embeddings\Distances\Distance;
 use PhpLLP\Embeddings\Document;
 use PhpLLP\Http\HttpClient;
+use PhpLLP\Http\HttpResponse;
 use PhpLLP\Support\Json;
 
 class RedisVectorStore extends VectorStoreBase
@@ -287,11 +288,12 @@ class RedisVectorStore extends VectorStoreBase
             ],
         ];
 
-        $this->httpClient->post(
+        $response = $this->httpClient->post(
             $this->baseUrl . '/ft.create',
             ['Content-Type' => 'application/json'],
             $payload
         );
+        $this->checkHttpResponse($response, 'initialize');
     }
 
     public function addDocument(Document $document): string
@@ -346,7 +348,7 @@ class RedisVectorStore extends VectorStoreBase
      */
     private function addDocumentViaHttp(string $id, Document $document): void
     {
-        $this->httpClient->post(
+        $response = $this->httpClient->post(
             $this->baseUrl . '/ft.add',
             ['Content-Type' => 'application/json'],
             [
@@ -360,6 +362,7 @@ class RedisVectorStore extends VectorStoreBase
                 ],
             ]
         );
+        $this->checkHttpResponse($response, 'addDocumentViaHttp');
     }
 
     public function addDocuments(array $documents): array
@@ -382,7 +385,7 @@ class RedisVectorStore extends VectorStoreBase
                 $this->redis->sRem($this->idsKey(), $id);
             }
         } else {
-            $this->httpClient->post(
+            $response = $this->httpClient->post(
                 $this->baseUrl . '/ft.del',
                 ['Content-Type' => 'application/json'],
                 [
@@ -390,6 +393,7 @@ class RedisVectorStore extends VectorStoreBase
                     'docId' => $id,
                 ]
             );
+            $this->checkHttpResponse($response, 'delete');
         }
         return true;
     }
@@ -463,6 +467,7 @@ class RedisVectorStore extends VectorStoreBase
         $response = $this->httpClient->get(
             $this->baseUrl . '/ft.get?indexName=' . $this->indexName . '&docId=' . urlencode($id)
         );
+        $this->checkHttpResponse($response, 'getByIdViaHttp');
 
         $data = Json::decode($response->getBody());
         $fields = $data['results'][0]['document'] ?? [];
@@ -569,6 +574,7 @@ class RedisVectorStore extends VectorStoreBase
         $response = $this->httpClient->get(
             $this->baseUrl . '/ft.search?indexName=' . $this->indexName . '&q=' . urlencode($query) . '&limit=10000'
         );
+        $this->checkHttpResponse($response, 'listViaHttp');
 
         $data = Json::decode($response->getBody());
         $results = $data['results'] ?? [];
@@ -734,6 +740,7 @@ class RedisVectorStore extends VectorStoreBase
 
         $url = $this->baseUrl . '/ft.search?' . http_build_query($params);
         $response = $this->httpClient->get($url);
+        $this->checkHttpResponse($response, 'similaritySearchViaHttp');
 
         $data = Json::decode($response->getBody());
         $results = $data['results'] ?? [];
@@ -874,6 +881,7 @@ class RedisVectorStore extends VectorStoreBase
             $response = $this->httpClient->get(
                 $this->baseUrl . '/ft.info?indexName=' . $this->indexName
             );
+            $this->checkHttpResponse($response, 'countViaHttp');
             $data = Json::decode($response->getBody());
             return (int)($data['numDocs'] ?? 0);
         } catch (\Exception $e) {
@@ -937,6 +945,7 @@ class RedisVectorStore extends VectorStoreBase
             $response = $this->httpClient->get(
                 $this->baseUrl . '/ft.info?indexName=' . $this->indexName
             );
+            $this->checkHttpResponse($response, 'ensureInitializedHttp');
             $data = Json::decode($response->getBody());
             if (is_array($data) && isset($data['numDocs'])) {
                 $this->initialized = true;
@@ -971,11 +980,12 @@ class RedisVectorStore extends VectorStoreBase
             $this->initialized = true;
         } else {
             try {
-                $this->httpClient->post(
+                $response = $this->httpClient->post(
                     $this->baseUrl . '/ft.drop',
                     ['Content-Type' => 'application/json'],
                     ['indexName' => $this->indexName]
                 );
+                $this->checkHttpResponse($response, 'clear');
             } catch (\Exception $e) {
             }
             $this->initialize();

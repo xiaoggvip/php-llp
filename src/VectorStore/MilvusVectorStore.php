@@ -7,6 +7,7 @@ namespace PhpLLP\VectorStore;
 use PhpLLP\Embeddings\Distances\Distance;
 use PhpLLP\Embeddings\Document;
 use PhpLLP\Http\HttpClient;
+use PhpLLP\Http\HttpResponse;
 use PhpLLP\Support\Json;
 
 class MilvusVectorStore extends VectorStoreBase
@@ -111,11 +112,12 @@ class MilvusVectorStore extends VectorStoreBase
             ],
         ];
 
-        $this->httpClient->post(
+        $response = $this->httpClient->post(
             $this->baseUrl . '/v2/vectordb/collections/create',
             $this->getHeaders(),
             $payload
         );
+        $this->checkHttpResponse($response, 'initialize');
     }
 
     public function addDocument(Document $document): string
@@ -136,11 +138,12 @@ class MilvusVectorStore extends VectorStoreBase
             ],
         ];
 
-        $this->httpClient->post(
+        $response = $this->httpClient->post(
             $this->baseUrl . '/v2/vectordb/entities/insert',
             $this->getHeaders(),
             $payload
         );
+        $this->checkHttpResponse($response, 'addDocument');
 
         return $id;
     }
@@ -163,7 +166,7 @@ class MilvusVectorStore extends VectorStoreBase
             ];
         }
 
-        $this->httpClient->post(
+        $response = $this->httpClient->post(
             $this->baseUrl . '/v2/vectordb/entities/insert',
             $this->getHeaders(),
             [
@@ -171,13 +174,14 @@ class MilvusVectorStore extends VectorStoreBase
                 'data' => $data,
             ]
         );
+        $this->checkHttpResponse($response, 'addDocuments');
 
         return $ids;
     }
 
     public function delete(string $id): bool
     {
-        $this->httpClient->post(
+        $response = $this->httpClient->post(
             $this->baseUrl . '/v2/vectordb/entities/delete',
             $this->getHeaders(),
             [
@@ -185,6 +189,7 @@ class MilvusVectorStore extends VectorStoreBase
                 'filter' => 'id == "' . $id . '"',
             ]
         );
+        $this->checkHttpResponse($response, 'delete');
         return true;
     }
 
@@ -196,7 +201,7 @@ class MilvusVectorStore extends VectorStoreBase
 
         $expr = 'id in [' . implode(',', array_map(function ($id) { return '"' . $id . '"'; }, $ids)) . ']';
 
-        $this->httpClient->post(
+        $response = $this->httpClient->post(
             $this->baseUrl . '/v2/vectordb/entities/delete',
             $this->getHeaders(),
             [
@@ -204,6 +209,7 @@ class MilvusVectorStore extends VectorStoreBase
                 'filter' => $expr,
             ]
         );
+        $this->checkHttpResponse($response, 'deleteBatch');
 
         return count($ids);
     }
@@ -219,7 +225,7 @@ class MilvusVectorStore extends VectorStoreBase
                 'outputFields' => ['content', 'metadata', 'hash'],
             ]
         );
-
+        $this->checkHttpResponse($response, 'getById');
         $data = Json::decode($response->getBody());
         $results = $data['data'] ?? [];
 
@@ -251,7 +257,7 @@ class MilvusVectorStore extends VectorStoreBase
             $this->getHeaders(),
             $payload
         );
-
+        $this->checkHttpResponse($response, 'list');
         $data = Json::decode($response->getBody());
         $results = $data['data'] ?? [];
 
@@ -294,7 +300,7 @@ class MilvusVectorStore extends VectorStoreBase
             $this->getHeaders(),
             $payload
         );
-
+        $this->checkHttpResponse($response, 'similaritySearch');
         $data = Json::decode($response->getBody());
         $results = $data['data'] ?? [];
 
@@ -318,11 +324,13 @@ class MilvusVectorStore extends VectorStoreBase
                 ['collectionName' => $this->collectionName]
             );
 
-            $body = $response->getBody();
-            if (!empty($body)) {
-                $data = Json::decode($body);
-                if (is_array($data) && isset($data['entityCount'])) {
-                    return (int)$data['entityCount'];
+            if ($response->isSuccess()) {
+                $body = $response->getBody();
+                if (!empty($body)) {
+                    $data = Json::decode($body);
+                    if (is_array($data) && isset($data['entityCount'])) {
+                        return (int)$data['entityCount'];
+                    }
                 }
             }
         } catch (\Exception $e) {
@@ -347,16 +355,18 @@ class MilvusVectorStore extends VectorStoreBase
                 ['collectionName' => $this->collectionName]
             );
 
-            $body = $response->getBody();
-            if (!empty($body)) {
-                $data = Json::decode($body);
-                if (is_array($data) && (
-                    isset($data['entity']) ||
-                    isset($data['collectionName']) ||
-                    !empty($data['data'])
-                )) {
-                    $this->initialized = true;
-                    return;
+            if ($response->isSuccess()) {
+                $body = $response->getBody();
+                if (!empty($body)) {
+                    $data = Json::decode($body);
+                    if (is_array($data) && (
+                        isset($data['entity']) ||
+                        isset($data['collectionName']) ||
+                        !empty($data['data'])
+                    )) {
+                        $this->initialized = true;
+                        return;
+                    }
                 }
             }
         } catch (\Exception $e) {
@@ -371,11 +381,12 @@ class MilvusVectorStore extends VectorStoreBase
 
     public function clear(): void
     {
-        $this->httpClient->post(
+        $response = $this->httpClient->post(
             $this->baseUrl . '/v2/vectordb/collections/drop',
             $this->getHeaders(),
             ['collectionName' => $this->collectionName]
         );
+        $this->checkHttpResponse($response, 'clear');
         $this->initialized = false;
     }
 

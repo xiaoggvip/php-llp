@@ -207,7 +207,7 @@ class AnthropicChat implements ChatInterface
      * @param array<string, mixed> $options
      * @return mixed
      */
-    protected function generateChatWithTools(array $messages, array $tools, array $options = [])
+    public function generateChatWithTools(array $messages, array $tools, array $options = [])
     {
         $payload = $this->buildPayload($messages, $options);
         $payload['tools'] = $tools;

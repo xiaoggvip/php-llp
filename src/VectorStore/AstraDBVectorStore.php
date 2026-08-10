@@ -7,6 +7,7 @@ namespace PhpLLP\VectorStore;
 use PhpLLP\Embeddings\Distances\Distance;
 use PhpLLP\Embeddings\Document;
 use PhpLLP\Http\HttpClient;
+use PhpLLP\Http\HttpResponse;
 use PhpLLP\Support\Json;
 
 class AstraDBVectorStore extends VectorStoreBase
@@ -65,11 +66,12 @@ class AstraDBVectorStore extends VectorStoreBase
         ];
 
         $url = $this->getCollectionUrl();
-        $this->httpClient->put(
+        $response = $this->httpClient->put(
             $url,
             $this->getHeaders(),
             $payload
         );
+        $this->checkHttpResponse($response, 'initialize');
     }
 
     public function addDocument(Document $document): string
@@ -84,11 +86,12 @@ class AstraDBVectorStore extends VectorStoreBase
             '$vector' => $document->getEmbedding(),
         ];
 
-        $this->httpClient->put(
+        $response = $this->httpClient->put(
             $this->getCollectionUrl() . '/' . $id,
             $this->getHeaders(),
             $payload
         );
+        $this->checkHttpResponse($response, 'addDocument');
 
         return $id;
     }
@@ -110,21 +113,23 @@ class AstraDBVectorStore extends VectorStoreBase
             ];
         }
 
-        $this->httpClient->post(
+        $response = $this->httpClient->post(
             $this->getCollectionUrl() . '/bulk',
             $this->getHeaders(),
             $docs
         );
+        $this->checkHttpResponse($response, 'addDocuments');
 
         return $ids;
     }
 
     public function delete(string $id): bool
     {
-        $this->httpClient->delete(
+        $response = $this->httpClient->delete(
             $this->getCollectionUrl() . '/' . $id,
             $this->getHeaders()
         );
+        $this->checkHttpResponse($response, 'delete');
         return true;
     }
 
@@ -134,11 +139,12 @@ class AstraDBVectorStore extends VectorStoreBase
             return 0;
         }
 
-        $this->httpClient->post(
+        $response = $this->httpClient->post(
             $this->getCollectionUrl() . '/delete',
             $this->getHeaders(),
             ['document_ids' => $ids]
         );
+        $this->checkHttpResponse($response, 'deleteBatch');
 
         return count($ids);
     }
@@ -149,7 +155,7 @@ class AstraDBVectorStore extends VectorStoreBase
             $this->getCollectionUrl() . '/' . $id,
             $this->getHeaders()
         );
-
+        $this->checkHttpResponse($response, 'getById');
         $data = Json::decode($response->getBody());
         if (empty($data)) {
             return null;
@@ -173,7 +179,7 @@ class AstraDBVectorStore extends VectorStoreBase
             $this->getHeaders(),
             $payload
         );
-
+        $this->checkHttpResponse($response, 'list');
         $data = Json::decode($response->getBody());
         $docs = $data['data'] ?? [];
 
@@ -206,7 +212,7 @@ class AstraDBVectorStore extends VectorStoreBase
             $this->getHeaders(),
             $payload
         );
-
+        $this->checkHttpResponse($response, 'similaritySearch');
         $data = Json::decode($response->getBody());
         $docs = $data['data'] ?? [];
 
@@ -227,7 +233,7 @@ class AstraDBVectorStore extends VectorStoreBase
             $this->getCollectionUrl(),
             $this->getHeaders()
         );
-
+        $this->checkHttpResponse($response, 'count');
         $data = Json::decode($response->getBody());
         return (int)($data['count'] ?? 0);
     }
@@ -246,10 +252,12 @@ class AstraDBVectorStore extends VectorStoreBase
                 $this->getCollectionUrl(),
                 $this->getHeaders()
             );
-            $data = Json::decode($response->getBody());
-            if (!empty($data)) {
-                $this->initialized = true;
-                return;
+            if ($response->isSuccess()) {
+                $data = Json::decode($response->getBody());
+                if (!empty($data)) {
+                    $this->initialized = true;
+                    return;
+                }
             }
         } catch (\Exception $e) {
         }
@@ -260,10 +268,11 @@ class AstraDBVectorStore extends VectorStoreBase
 
     public function clear(): void
     {
-        $this->httpClient->delete(
+        $response = $this->httpClient->delete(
             $this->getCollectionUrl(),
             $this->getHeaders()
         );
+        $this->checkHttpResponse($response, 'clear');
         $this->initialized = false;
     }
 

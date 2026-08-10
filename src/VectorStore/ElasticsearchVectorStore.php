@@ -7,6 +7,7 @@ namespace PhpLLP\VectorStore;
 use PhpLLP\Embeddings\Distances\Distance;
 use PhpLLP\Embeddings\Document;
 use PhpLLP\Http\HttpClient;
+use PhpLLP\Http\HttpResponse;
 use PhpLLP\Support\Json;
 
 class ElasticsearchVectorStore extends VectorStoreBase
@@ -73,11 +74,12 @@ class ElasticsearchVectorStore extends VectorStoreBase
         ];
 
         $headers = $this->getHeaders();
-        $this->httpClient->put(
+        $response = $this->httpClient->put(
             $this->baseUrl . '/' . $this->collectionName,
             $headers,
             $payload
         );
+        $this->checkHttpResponse($response, 'initialize');
     }
 
     public function addDocument(Document $document): string
@@ -91,11 +93,12 @@ class ElasticsearchVectorStore extends VectorStoreBase
             'vector' => $document->getEmbedding(),
         ];
 
-        $this->httpClient->put(
+        $response = $this->httpClient->put(
             $this->baseUrl . '/' . $this->collectionName . '/_doc/' . $id,
             $this->getHeaders(),
             $payload
         );
+        $this->checkHttpResponse($response, 'addDocument');
 
         return $id;
     }
@@ -126,11 +129,12 @@ class ElasticsearchVectorStore extends VectorStoreBase
         }
 
         if (!empty($bulkPayload)) {
-            $this->httpClient->post(
+            $response = $this->httpClient->post(
                 $this->baseUrl . '/_bulk',
                 $this->getHeaders(['Content-Type' => 'application/x-ndjson']),
                 $bulkPayload
             );
+            $this->checkHttpResponse($response, 'addDocuments');
         }
 
         return $ids;
@@ -138,10 +142,11 @@ class ElasticsearchVectorStore extends VectorStoreBase
 
     public function delete(string $id): bool
     {
-        $this->httpClient->delete(
+        $response = $this->httpClient->delete(
             $this->baseUrl . '/' . $this->collectionName . '/_doc/' . $id,
             $this->getHeaders()
         );
+        $this->checkHttpResponse($response, 'delete');
         return true;
     }
 
@@ -161,11 +166,12 @@ class ElasticsearchVectorStore extends VectorStoreBase
             ]) . "\n";
         }
 
-        $this->httpClient->post(
+        $response = $this->httpClient->post(
             $this->baseUrl . '/_bulk',
             $this->getHeaders(['Content-Type' => 'application/x-ndjson']),
             $bulkPayload
         );
+        $this->checkHttpResponse($response, 'deleteBatch');
 
         return count($ids);
     }
@@ -176,7 +182,7 @@ class ElasticsearchVectorStore extends VectorStoreBase
             $this->baseUrl . '/' . $this->collectionName . '/_doc/' . $id,
             $this->getHeaders()
         );
-
+        $this->checkHttpResponse($response, 'getById');
         $data = Json::decode($response->getBody());
         if (empty($data['found'])) {
             return null;
@@ -204,7 +210,7 @@ class ElasticsearchVectorStore extends VectorStoreBase
             $this->getHeaders(),
             ['query' => $query, 'size' => 10000]
         );
-
+        $this->checkHttpResponse($response, 'list');
         $data = Json::decode($response->getBody());
         $hits = $data['hits']['hits'] ?? [];
 
@@ -257,7 +263,7 @@ class ElasticsearchVectorStore extends VectorStoreBase
             $this->getHeaders(),
             $payload
         );
-
+        $this->checkHttpResponse($response, 'similaritySearch');
         $data = Json::decode($response->getBody());
         $hits = $data['hits']['hits'] ?? [];
 
@@ -278,7 +284,7 @@ class ElasticsearchVectorStore extends VectorStoreBase
             $this->baseUrl . '/' . $this->collectionName . '/_count',
             $this->getHeaders()
         );
-
+        $this->checkHttpResponse($response, 'count');
         $data = Json::decode($response->getBody());
         return (int)($data['count'] ?? 0);
     }
@@ -297,10 +303,12 @@ class ElasticsearchVectorStore extends VectorStoreBase
                 $this->baseUrl . '/' . $this->collectionName,
                 $this->getHeaders()
             );
-            $data = Json::decode($response->getBody());
-            if (isset($data[$this->collectionName])) {
-                $this->initialized = true;
-                return;
+            if ($response->isSuccess()) {
+                $data = Json::decode($response->getBody());
+                if (isset($data[$this->collectionName])) {
+                    $this->initialized = true;
+                    return;
+                }
             }
         } catch (\Exception $e) {
         }
@@ -311,10 +319,11 @@ class ElasticsearchVectorStore extends VectorStoreBase
 
     public function clear(): void
     {
-        $this->httpClient->delete(
+        $response = $this->httpClient->delete(
             $this->baseUrl . '/' . $this->collectionName,
             $this->getHeaders()
         );
+        $this->checkHttpResponse($response, 'clear');
         $this->initialized = false;
     }
 

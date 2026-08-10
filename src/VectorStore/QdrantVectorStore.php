@@ -7,6 +7,7 @@ namespace PhpLLP\VectorStore;
 use PhpLLP\Embeddings\Distances\Distance;
 use PhpLLP\Embeddings\Document;
 use PhpLLP\Http\HttpClient;
+use PhpLLP\Http\HttpResponse;
 use PhpLLP\Support\Json;
 
 class QdrantVectorStore extends VectorStoreBase
@@ -64,11 +65,12 @@ class QdrantVectorStore extends VectorStoreBase
             $headers['api-key'] = $this->apiKey;
         }
 
-        $this->httpClient->put(
+        $response = $this->httpClient->put(
             $this->baseUrl . '/collections/' . $this->collectionName,
             $headers,
             $payload
         );
+        $this->checkHttpResponse($response, 'initialize collection');
     }
 
     public function addDocument(Document $document): string
@@ -94,11 +96,12 @@ class QdrantVectorStore extends VectorStoreBase
             $headers['api-key'] = $this->apiKey;
         }
 
-        $this->httpClient->put(
+        $response = $this->httpClient->put(
             $this->baseUrl . '/collections/' . $this->collectionName . '/points',
             $headers,
             $payload
         );
+        $this->checkHttpResponse($response, 'addDocument');
 
         return $id;
     }
@@ -128,11 +131,12 @@ class QdrantVectorStore extends VectorStoreBase
             $headers['api-key'] = $this->apiKey;
         }
 
-        $this->httpClient->put(
+        $response = $this->httpClient->put(
             $this->baseUrl . '/collections/' . $this->collectionName . '/points',
             $headers,
             ['points' => $points]
         );
+        $this->checkHttpResponse($response, 'addDocuments');
 
         return $ids;
     }
@@ -144,10 +148,11 @@ class QdrantVectorStore extends VectorStoreBase
             $headers['api-key'] = $this->apiKey;
         }
 
-        $this->httpClient->delete(
+        $response = $this->httpClient->delete(
             $this->baseUrl . '/collections/' . $this->collectionName . '/points/' . $id,
             $headers
         );
+        $this->checkHttpResponse($response, 'delete');
 
         return true;
     }
@@ -163,11 +168,12 @@ class QdrantVectorStore extends VectorStoreBase
             $headers['api-key'] = $this->apiKey;
         }
 
-        $this->httpClient->post(
+        $response = $this->httpClient->post(
             $this->baseUrl . '/collections/' . $this->collectionName . '/points/delete',
             $headers,
             ['points' => $ids]
         );
+        $this->checkHttpResponse($response, 'deleteBatch');
 
         return count($ids);
     }
@@ -183,7 +189,7 @@ class QdrantVectorStore extends VectorStoreBase
             $this->baseUrl . '/collections/' . $this->collectionName . '/points/' . $id,
             $headers
         );
-
+        $this->checkHttpResponse($response, 'getById');
         $data = Json::decode($response->getBody());
         $result = $data['result'] ?? null;
 
@@ -221,7 +227,7 @@ class QdrantVectorStore extends VectorStoreBase
             $headers,
             $payload
         );
-
+        $this->checkHttpResponse($response, 'list');
         $data = Json::decode($response->getBody());
         $points = $data['result']['points'] ?? [];
 
@@ -266,7 +272,7 @@ class QdrantVectorStore extends VectorStoreBase
             $headers,
             $payload
         );
-
+        $this->checkHttpResponse($response, 'similaritySearch');
         $data = Json::decode($response->getBody());
         $results = $data['result'] ?? [];
 
@@ -292,7 +298,7 @@ class QdrantVectorStore extends VectorStoreBase
             $this->baseUrl . '/collections/' . $this->collectionName,
             $headers
         );
-
+        $this->checkHttpResponse($response, 'count');
         $data = Json::decode($response->getBody());
         return (int)($data['result']['points_count'] ?? 0);
     }
@@ -317,10 +323,12 @@ class QdrantVectorStore extends VectorStoreBase
                 $headers
             );
 
-            $data = Json::decode($response->getBody());
-            if (isset($data['result'])) {
-                $this->initialized = true;
-                return;
+            if ($response->isSuccess()) {
+                $data = Json::decode($response->getBody());
+                if (isset($data['result'])) {
+                    $this->initialized = true;
+                    return;
+                }
             }
         } catch (\Exception $e) {
         }
@@ -336,10 +344,11 @@ class QdrantVectorStore extends VectorStoreBase
             $headers['api-key'] = $this->apiKey;
         }
 
-        $this->httpClient->delete(
+        $response = $this->httpClient->delete(
             $this->baseUrl . '/collections/' . $this->collectionName,
             $headers
         );
+        $this->checkHttpResponse($response, 'clear');
         $this->initialized = false;
     }
 

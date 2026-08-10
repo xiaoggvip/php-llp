@@ -87,10 +87,6 @@ class Parameter
             $result['properties'] = $this->properties;
         }
 
-        if (!empty($this->required)) {
-            $result['required'] = $this->required;
-        }
-
         return $result;
     }
 

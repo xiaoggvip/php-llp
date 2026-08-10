@@ -7,6 +7,7 @@ namespace PhpLLP\VectorStore;
 use PhpLLP\Embeddings\Distances\Distance;
 use PhpLLP\Embeddings\Document;
 use PhpLLP\Http\HttpClient;
+use PhpLLP\Http\HttpResponse;
 use PhpLLP\Support\Json;
 
 class PostgresVectorStore extends VectorStoreBase
@@ -62,11 +63,12 @@ class PostgresVectorStore extends VectorStoreBase
         ";
 
         if ($this->apiKey) {
-            $this->httpClient->post(
+            $response = $this->httpClient->post(
                 $this->baseUrl . '/_sql',
                 ['Authorization' => 'Bearer ' . $this->apiKey],
                 ['query' => $sql]
             );
+            $this->checkHttpResponse($response, 'initialize table');
         }
     }
 
@@ -281,6 +283,7 @@ class PostgresVectorStore extends VectorStoreBase
             $headers,
             $payload
         );
+        $this->checkHttpResponse($response, 'executeQuery');
 
         $data = Json::decode($response->getBody());
         return $data['rows'] ?? [];

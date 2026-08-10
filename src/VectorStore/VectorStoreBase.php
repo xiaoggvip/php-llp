@@ -7,6 +7,7 @@ namespace PhpLLP\VectorStore;
 use PhpLLP\Embeddings\Distances\CosineDistance;
 use PhpLLP\Embeddings\Distances\Distance;
 use PhpLLP\Embeddings\Document;
+use PhpLLP\Http\HttpResponse;
 
 abstract class VectorStoreBase
 {
@@ -139,5 +140,23 @@ abstract class VectorStoreBase
     protected function cosineSimilarity(array $a, array $b): float
     {
         return $this->distanceMetric->calculate($a, $b);
+    }
+
+    /**
+     * 检查 HTTP 响应状态，非成功状态抛出异常
+     */
+    protected function checkHttpResponse(HttpResponse $response, string $context = ''): void
+    {
+        if (!$response->isSuccess()) {
+            $message = sprintf(
+                'HTTP请求失败: [%d] %s',
+                $response->getStatusCode(),
+                $response->getBody()
+            );
+            if ($context) {
+                $message .= ' (' . $context . ')';
+            }
+            throw new \RuntimeException($message);
+        }
     }
 }

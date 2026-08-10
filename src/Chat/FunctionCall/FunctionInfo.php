@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace PhpLLP\Chat\FunctionCall;
 
+use PhpLLP\Contracts\ToolInterface;
+
 class FunctionInfo
 {
     /** @var string */
@@ -111,5 +113,40 @@ class FunctionInfo
     public function toArray(): array
     {
         return $this->toToolFormat();
+    }
+
+    /**
+     * Create from ToolInterface
+     *
+     * @param ToolInterface $tool
+     * @return self
+     */
+    public static function fromTool(ToolInterface $tool): self
+    {
+        $parameters = $tool->getParameters();
+        $toolParameters = [];
+        $requiredFields = $parameters['required'] ?? [];
+
+        if (isset($parameters['properties'])) {
+            foreach ($parameters['properties'] as $name => $config) {
+                $isRequired = in_array($name, $requiredFields, true);
+                $toolParameters[] = new Parameter(
+                    $name,
+                    $config['type'] ?? 'string',
+                    $config['description'] ?? '',
+                    [],
+                    $isRequired ? [$name] : []
+                );
+            }
+        }
+
+        return new self(
+            $tool->getName(),
+            $tool->getDescription(),
+            $toolParameters,
+            function (array $args) use ($tool) {
+                return $tool->execute($args);
+            }
+        );
     }
 }

@@ -35,6 +35,16 @@ interface ChatInterface
     public function generateTextWithTools(string $prompt, array $tools, array $options = []);
 
     /**
+     * Generate chat with tools from messages
+     *
+     * @param array<int, array<string, mixed>> $messages
+     * @param array<int, array<string, mixed>> $tools
+     * @param array<string, mixed> $options
+     * @return mixed
+     */
+    public function generateChatWithTools(array $messages, array $tools, array $options = []);
+
+    /**
      * Stream chat completion
      *
      * @param string $prompt
